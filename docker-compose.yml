@@ -1,0 +1,24 @@
+# 本地开发：固定预览 http://localhost:3000
+# 代码挂载进容器，保存后刷新即可看到最新效果（支持热更新）
+# 使用：docker compose up   （需安装 Docker Desktop）
+
+services:
+  app:
+    image: node:20-bookworm-slim
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+      # 部分环境下文件监听更稳（Docker Desktop / 远程磁盘）
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    command: >
+      sh -c "npm install &&
+      exec npx next dev --turbopack -H 0.0.0.0 -p 3000"
+
+volumes:
+  node_modules:

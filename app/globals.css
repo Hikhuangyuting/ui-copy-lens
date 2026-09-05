@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 页面底色与 Figma Page 一致，见 tailwind.config.js colors.page */
+body {
+  @apply bg-page text-text-primary;
+}
+
+* {
+  scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
+  scrollbar-width: thin;
+}
+
+::selection {
+  background: rgba(72, 107, 249, 0.22);
+}
+
+button,
+textarea,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.analysis-loader {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #486bf9;
+  animation: analysis-spin 0.8s linear infinite;
+}
+
+.canvas-toolbar {
+  @apply flex h-[49px] items-center gap-4 rounded-xl bg-white px-6 py-4 shadow-[0_8px_28px_rgba(0,0,0,0.12)];
+}
+
+.toolbar-action {
+  @apply inline-flex min-h-8 items-center gap-[5px] whitespace-nowrap rounded-md px-1 text-sm text-[#333] transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500;
+}
+
+.toolbar-icon {
+  @apply inline-flex size-8 items-center justify-center rounded-md text-[#333] transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500;
+}
+
+.toolbar-percent {
+  @apply inline-flex min-h-8 min-w-9 items-center justify-center rounded-md px-1 text-sm tabular-nums text-[#333] transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500;
+}
+
+.toolbar-divider {
+  @apply h-3 w-px shrink-0 bg-[#d9d9d9];
+}
+
+@keyframes analysis-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
