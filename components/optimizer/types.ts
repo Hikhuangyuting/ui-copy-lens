@@ -24,6 +24,7 @@ export type TextRegion = {
   original: string;
   optimized: string;
   confidence?: number;
+  failed?: boolean;
 };
 
 export type OcrBlock = Omit<TextRegion, "optimized"> & {

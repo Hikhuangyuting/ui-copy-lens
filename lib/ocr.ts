@@ -1,5 +1,22 @@
 import type { OcrBlock } from "@/components/optimizer/types";
 
+type OcrWorker = Awaited<ReturnType<(typeof import("tesseract.js"))["createWorker"]>>;
+let workerPromise: Promise<OcrWorker> | null = null;
+let progressListener: ((progress: OcrProgress) => void) | undefined;
+
+async function getWorker(onProgress?: (progress: OcrProgress) => void) {
+  progressListener = onProgress;
+  if (!workerPromise) {
+    const { createWorker } = await import("tesseract.js");
+    workerPromise = createWorker("chi_sim+eng", 1, {
+      // 语言包随应用发布，避免浏览器运行时依赖 jsDelivr/CDN。
+      langPath: "/tessdata",
+      logger: (message) => progressListener?.({ status: message.status, progress: message.progress ?? 0 }),
+    });
+  }
+  return workerPromise;
+}
+
 export type OcrProgress = {
   status: string;
   progress: number;
@@ -15,14 +32,11 @@ export async function recognizeInterfaceText(
   const imageWidth = bitmap.width;
   const imageHeight = bitmap.height;
   bitmap.close();
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("chi_sim+eng", 1, {
-    logger: (message) => onProgress?.({
-      status: message.status,
-      progress: message.progress ?? 0,
-    }),
-  });
-  const abortWorker = () => { void worker.terminate(); };
+  const worker = await getWorker(onProgress);
+  const abortWorker = () => {
+    workerPromise = null;
+    void worker.terminate();
+  };
   signal?.addEventListener("abort", abortWorker, { once: true });
 
   try {
@@ -46,10 +60,6 @@ export async function recognizeInterfaceText(
     }));
   } finally {
     signal?.removeEventListener("abort", abortWorker);
-    try {
-      await worker.terminate();
-    } catch {
-      // 取消分析时 worker 可能已经被终止；此处无需覆盖取消状态。
-    }
+    // Worker 跨请求复用，避免每次重新加载中英文识别模型。
   }
 }

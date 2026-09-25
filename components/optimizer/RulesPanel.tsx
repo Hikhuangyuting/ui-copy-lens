@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, PanelRightClose, Trash2 } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import type { AnalysisResult, CopyStyle, FollowUpQuestion, WorkspaceStatus } from "./types";
@@ -18,6 +19,7 @@ type RulesPanelProps = {
   answers: Record<string, string>;
   onAnswerChange: (id: string, value: string) => void;
   onOptimize: () => void;
+  onCollapse: () => void;
 };
 
 function RequirementField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
@@ -72,7 +74,7 @@ function UnderstandingCard({ analysis }: { analysis: AnalysisResult }) {
   );
 }
 
-export function RulesPanel({ status, analysis, requirement, onRequirementChange, style, onStyleChange, answers, onAnswerChange, onOptimize }: RulesPanelProps) {
+export function RulesPanel({ status, analysis, requirement, onRequirementChange, style, onStyleChange, answers, onAnswerChange, onOptimize, onCollapse }: RulesPanelProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const needsInfo = status === "needs-info" && analysis?.needsMoreInfo;
   const hasAnalyzed = Boolean(analysis) && ["analyzed", "needs-info", "completed"].includes(status);
@@ -90,7 +92,14 @@ export function RulesPanel({ status, analysis, requirement, onRequirementChange,
       <div className="flex w-full flex-col overflow-hidden rounded-3xl bg-white shadow-panel lg:h-[calc(100dvh-48px)] lg:min-h-[640px]">
         <header className="flex h-[88px] shrink-0 items-center justify-between px-8">
           <h2 className="text-xl font-medium">优化设置</h2>
-          <button type="button" className="rounded-md p-2 text-black/70 hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500" aria-label="收起优化设置" title="收起优化设置"><PanelRightClose className="size-4" strokeWidth={1.6} /></button>
+          <button type="button" className="flex size-8 items-center justify-center rounded-md text-black/70 hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500" aria-label="收起优化设置" title="收起优化设置" onClick={onCollapse}>
+            <span className="relative block size-4" aria-hidden>
+              <Image src="/figma/panel-collapse-line.svg" alt="" width={11} height={2} unoptimized className="absolute left-[5px] top-[2px]" />
+              <Image src="/figma/panel-collapse-line.svg" alt="" width={11} height={2} unoptimized className="absolute left-[5px] top-[12px]" />
+              <Image src="/figma/panel-collapse-arrow.svg" alt="" width={8} height={2} unoptimized className="absolute left-[8px] top-[7px]" />
+              <Image src="/figma/panel-collapse-mark.svg" alt="" width={9} height={9} unoptimized className="absolute left-[-3px] top-[4px] -rotate-45 -scale-x-100" />
+            </span>
+          </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">

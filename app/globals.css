@@ -7,6 +7,11 @@ body {
   @apply bg-page text-text-primary;
 }
 
+.region-action:hover .figma-action-icon,
+.region-action:focus-visible .figma-action-icon {
+  filter: brightness(0) saturate(100%) invert(43%) sepia(82%) saturate(1752%) hue-rotate(205deg) brightness(99%) contrast(97%);
+}
+
 * {
   scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
   scrollbar-width: thin;

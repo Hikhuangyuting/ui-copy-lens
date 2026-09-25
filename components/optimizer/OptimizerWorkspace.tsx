@@ -5,7 +5,7 @@ import { BrandHeader } from "./BrandHeader";
 import { RulesPanel } from "./RulesPanel";
 import { UploadCanvas } from "./UploadCanvas";
 import { recognizeInterfaceText } from "@/lib/ocr";
-import type { AnalysisResult, CopyStyle, TextRegion, WorkspaceStatus } from "./types";
+import type { AnalysisResult, CopyStyle, OcrBlock, TextRegion, WorkspaceStatus } from "./types";
 
 export function OptimizerWorkspace() {
   const [status, setStatus] = useState<WorkspaceStatus>("empty");
@@ -19,8 +19,11 @@ export function OptimizerWorkspace() {
   const [progressText, setProgressText] = useState("正在识别界面文字");
   const [errorMessage, setErrorMessage] = useState("");
   const [canvasFullscreen, setCanvasFullscreen] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const runId = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const ocrCacheRef = useRef<{ key: string; blocks: OcrBlock[] } | null>(null);
+  const fileKey = useCallback((file: File) => `${file.name}|${file.size}|${file.lastModified}`, []);
 
   useEffect(() => () => {
     if (imageUrl) URL.revokeObjectURL(imageUrl);
@@ -28,25 +31,30 @@ export function OptimizerWorkspace() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const analyzeImage = useCallback(async (file: File, requestRequirement = requirement, retainedRegions: TextRegion[] = []) => {
+  const analyzeImage = useCallback(async (file: File, requestRequirement = requirement, retainedRegions: TextRegion[] = [], preserveExisting = false) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     const currentRun = ++runId.current;
     setStatus("analyzing");
     setErrorMessage("");
-    setAnalysis(null);
-    setRegions([]);
-    setAnswers({});
+    if (!preserveExisting) {
+      setAnalysis(null);
+      setRegions([]);
+      setAnswers({});
+    }
     setProgressText("正在识别界面文字");
 
     try {
-      const blocks = await recognizeInterfaceText(file, ({ status: ocrStatus, progress }) => {
+      const cached = ocrCacheRef.current;
+      const blocks = cached?.key === fileKey(file) ? cached.blocks : await recognizeInterfaceText(file, ({ status: ocrStatus, progress }) => {
         if (currentRun !== runId.current) return;
         if (ocrStatus.includes("recognizing")) setProgressText(`正在识别界面文字 ${Math.round(progress * 100)}%`);
         else if (ocrStatus.includes("loading")) setProgressText("正在加载文字识别模型");
       }, controller.signal);
       if (currentRun !== runId.current) return;
+      if (cached?.key === fileKey(file)) setProgressText("正在复用本次图片的文字识别结果");
+      else ocrCacheRef.current = { key: fileKey(file), blocks };
       setProgressText("正在理解页面、筛选待优化文案并判断信息是否充分");
 
       const form = new FormData();
@@ -89,7 +97,7 @@ export function OptimizerWorkspace() {
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [requirement]);
+  }, [fileKey, requirement]);
 
   const selectFile = useCallback((file: File | null) => {
     if (!file) return;
@@ -104,6 +112,7 @@ export function OptimizerWorkspace() {
       if (!confirmed) return;
     }
     if (imageUrl) URL.revokeObjectURL(imageUrl);
+    ocrCacheRef.current = null;
     setUploadedFile(file);
     setImageUrl(URL.createObjectURL(file));
     if (replacingTask) {
@@ -121,7 +130,7 @@ export function OptimizerWorkspace() {
       const response = await fetch("/api/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analysis, answers, requirement, style }),
+        body: JSON.stringify({ analysis: { ...analysis, targetRegions: regions }, answers, requirement, style }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "文案优化失败");
@@ -132,7 +141,29 @@ export function OptimizerWorkspace() {
       setErrorMessage(error instanceof Error ? error.message : "文案优化失败，请重试");
       setStatus("error");
     }
-  }, [analysis, answers, requirement, style]);
+  }, [analysis, answers, regions, requirement, style]);
+
+  const optimizeOne = useCallback(async (id: string, temporaryRequirement: string) => {
+    if (!analysis) throw new Error("当前页面尚未完成分析");
+    const target = regions.find((region) => region.id === id);
+    if (!target) throw new Error("未找到当前文案");
+
+    const response = await fetch("/api/optimize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        analysis: { ...analysis, targetRegions: [target] },
+        answers,
+        requirement: [requirement, temporaryRequirement].filter(Boolean).join("；"),
+        style,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error ?? "单条文案优化失败");
+    const optimized = payload.regions.find((region: { id: string; optimized: string }) => region.id === id)?.optimized;
+    if (!optimized) throw new Error("没有返回当前文案的优化结果");
+    setRegions((current) => current.map((region) => region.id === id ? { ...region, optimized, failed: false } : region));
+  }, [analysis, answers, regions, requirement, style]);
 
   const cancelAnalysis = useCallback(() => {
     abortRef.current?.abort();
@@ -143,7 +174,7 @@ export function OptimizerWorkspace() {
   }, [uploadedFile]);
 
   const reRecognize = useCallback(() => {
-    if (uploadedFile) void analyzeImage(uploadedFile, requirement, regions);
+    if (uploadedFile) void analyzeImage(uploadedFile, requirement, regions, true);
   }, [analyzeImage, regions, requirement, uploadedFile]);
 
   const isBusy = status === "analyzing" || status === "optimizing";
@@ -152,8 +183,8 @@ export function OptimizerWorkspace() {
     <main className="relative min-h-dvh overflow-hidden bg-page">
       {!canvasFullscreen ? <BrandHeader /> : null}
       <div className="flex min-h-dvh flex-col lg:flex-row">
-        <UploadCanvas status={status} imageUrl={imageUrl} fileName={uploadedFile?.name ?? null} regions={regions} errorMessage={errorMessage} onFileSelect={selectFile} onReRecognize={reRecognize} onRetry={reRecognize} onContinueAnalysis={reRecognize} onFullscreenChange={setCanvasFullscreen} />
-        {!canvasFullscreen ? <RulesPanel status={status} analysis={analysis} requirement={requirement} onRequirementChange={setRequirement} style={style} onStyleChange={setStyle} answers={answers} onAnswerChange={(id, value) => setAnswers((current) => ({ ...current, [id]: value }))} onOptimize={() => void optimize()} /> : null}
+        <UploadCanvas status={status} imageUrl={imageUrl} fileName={uploadedFile?.name ?? null} regions={regions} errorMessage={errorMessage} panelCollapsed={panelCollapsed} onFileSelect={selectFile} onReRecognize={reRecognize} onRetry={reRecognize} onContinueAnalysis={reRecognize} onFullscreenChange={setCanvasFullscreen} onOpenPanel={() => setPanelCollapsed(false)} onRegionsChange={setRegions} onOptimizeOne={optimizeOne} />
+        {!canvasFullscreen && !panelCollapsed ? <RulesPanel status={status} analysis={analysis} requirement={requirement} onRequirementChange={setRequirement} style={style} onStyleChange={setStyle} answers={answers} onAnswerChange={(id, value) => setAnswers((current) => ({ ...current, [id]: value }))} onOptimize={() => void optimize()} onCollapse={() => setPanelCollapsed(true)} /> : null}
       </div>
 
       {isBusy ? (

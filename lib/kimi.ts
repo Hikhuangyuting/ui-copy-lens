@@ -14,17 +14,18 @@ const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resol
 async function requestKimi(url: string, init: RequestInit): Promise<Response> {
   let lastNetworkError: unknown;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(90_000) });
-      if (response.status !== 429 || attempt === 2) return response;
+      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(60_000) });
+      const transient = response.status === 429 || response.status >= 500;
+      if (!transient || attempt === 1) return response;
 
       const retryAfter = Number(response.headers.get("retry-after"));
-      await wait(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : 1_200 * (attempt + 1));
+      await wait(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1_000, 4_000) : 1_200);
     } catch (error) {
       lastNetworkError = error;
-      if (attempt === 2) break;
-      await wait(800 * (attempt + 1));
+      if (attempt === 1) break;
+      await wait(800);
     }
   }
 
